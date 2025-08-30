@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -12,16 +11,22 @@ st.set_page_config(
     layout="wide"
 )
 
-# Load data with error handling
+# -------------------------
+# Load data with file upload
+# -------------------------
 @st.cache_data
-def load_data():
-    try:
-        # Try to load the data file
-        return pd.read_csv('supplier_data.csv')
-    except FileNotFoundError:
-        # If file not found, create sample data
-        st.warning("Generating sample data...")
-        return generate_sample_data()
+def load_data(uploaded_file=None):
+    if uploaded_file is not None:
+        # Load from uploaded CSV
+        return pd.read_csv(uploaded_file)
+    else:
+        try:
+            # Try to load from local CSV
+            return pd.read_csv('supplier_data.csv')
+        except FileNotFoundError:
+            # If no file found, generate sample
+            st.warning("No CSV file found. Generating sample data...")
+            return generate_sample_data()
 
 def generate_sample_data(num_suppliers=50):
     """
@@ -63,7 +68,9 @@ def generate_sample_data(num_suppliers=50):
     
     return df
 
+# -------------------------
 # Scoring functions
+# -------------------------
 def calculate_sustainability_score(row, weights):
     """
     Calculate overall sustainability score based on weighted factors
@@ -111,13 +118,25 @@ default_weights = {
     'certifications': 0.15
 }
 
+# -------------------------
+# Main App
+# -------------------------
 def main():
     st.title("Sustainable Supplier Selection Tool")
     st.markdown("Identify and evaluate suppliers based on sustainability metrics")
     
-    # Load data
-    df = load_data()
+    # Sidebar upload option
+    uploaded_file = st.sidebar.file_uploader("Upload Supplier Data (CSV)", type=["csv"])
     
+    # Load data
+    df = load_data(uploaded_file)
+
+    # Show data preview if uploaded
+    if uploaded_file is not None:
+        st.sidebar.success("File uploaded successfully!")
+        st.sidebar.write("Preview:")
+        st.sidebar.dataframe(df.head())
+
     # Sidebar filters
     st.sidebar.header("Filters")
     
@@ -314,3 +333,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
