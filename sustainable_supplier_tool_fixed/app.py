@@ -4,145 +4,127 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 
-# Set page config
 st.set_page_config(
     page_title="Sustainable Supplier Selection",
     page_icon="🌱",
     layout="wide"
 )
 
-# Load data with caching
 @st.cache_data
 def load_data(uploaded_file=None):
     if uploaded_file is not None:
         return pd.read_csv(uploaded_file)
     else:
-        # fallback file if exists
-        if os.path.exists("supplier_data.csv"):
-            return pd.read_csv("supplier_data.csv")
-        else:
-            return pd.DataFrame()
+        try:
+            return pd.read_csv('supplier_data.csv')
+        except FileNotFoundError:
+            st.warning("No CSV file found. Generating sample data...")
+            return generate_sample_data()
 
-# Calculate scores
-def calculate_scores(df, weights):
-    if df.empty:
-        return df
-
-    df = df.copy()
-
-    # Normalize numerical criteria (if present)
-    for col in ["carbon_footprint", "recycling_rate", "energy_efficiency", "water_usage", "waste_production"]:
-        if col in df.columns:
-            if col in ["carbon_footprint", "water_usage", "waste_production"]:
-                df[col + "_norm"] = 1 - (df[col] - df[col].min()) / (df[col].max() - df[col].min())
-            else:
-                df[col + "_norm"] = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
-
-    # Certification score
-    cert_cols = [c for c in ["ISO_14001", "Fair_Trade", "Organic", "B_Corp", "Rainforest_Alliance"] if c in df.columns]
-    if cert_cols:
-        df["certification_score"] = df[cert_cols].sum(axis=1) / len(cert_cols)
-    else:
-        df["certification_score"] = 0
-
-    # Weighted score
-    df["sustainability_score"] = 0
-    if "carbon_footprint_norm" in df.columns:
-        df["sustainability_score"] += weights["Carbon Footprint"] * df["carbon_footprint_norm"]
-    if "recycling_rate_norm" in df.columns:
-        df["sustainability_score"] += weights["Recycling Rate"] * df["recycling_rate_norm"]
-    if "energy_efficiency_norm" in df.columns:
-        df["sustainability_score"] += weights["Energy Efficiency"] * df["energy_efficiency_norm"]
-    if "water_usage_norm" in df.columns:
-        df["sustainability_score"] += weights["Water Usage"] * df["water_usage_norm"]
-    if "waste_production_norm" in df.columns:
-        df["sustainability_score"] += weights["Waste Production"] * df["waste_production_norm"]
-    if "certification_score" in df.columns:
-        df["sustainability_score"] += weights["Certifications"] * df["certification_score"]
-
+def generate_sample_data(num_suppliers=50):
+    import numpy as np
+    np.random.seed(42)
+    data = {
+        'supplier_id': range(1, num_suppliers+1),
+        'name': [f'Supplier {i}' for i in range(1, num_suppliers+1)],
+        'carbon_footprint': np.random.uniform(100, 1000, num_suppliers),
+        'recycling_rate': np.random.uniform(20, 95, num_suppliers),
+        'energy_efficiency': np.random.uniform(50, 95, num_suppliers),
+        'water_usage': np.random.uniform(100, 10000, num_suppliers),
+        'waste_production': np.random.uniform(10, 500, num_suppliers),
+    }
+    certifications = ['ISO_14001', 'Fair_Trade', 'Organic', 'B_Corp', 'Rainforest_Alliance']
+    for cert in certifications:
+        data[cert] = np.random.choice([0, 1], size=num_suppliers, p=[0.6, 0.4])
+    locations = ['North America', 'Europe', 'Asia', 'South America', 'Africa']
+    industries = ['Electronics', 'Textiles', 'Food', 'Chemicals', 'Manufacturing']
+    data['location'] = np.random.choice(locations, num_suppliers)
+    data['industry'] = np.random.choice(industries, num_suppliers)
+    df = pd.DataFrame(data)
+    try:
+        df.to_csv('supplier_data.csv', index=False)
+    except:
+        pass
     return df
 
-# Main app
-def main():
-    st.title("🌱 Sustainable Supplier Selection Tool")
+def calculate_sustainability_score(row, weights):
+    normalized_carbon = 1 - (row['carbon_footprint'] / 1000)
+    normalized_recycling = row['recycling_rate'] / 100
+    normalized_energy = row['energy_efficiency'] / 100
+    normalized_water = 1 - (row['water_usage'] / 10000)
+    normalized_waste = 1 - (row['waste_production'] / 500)
+    cert_cols = ['ISO_14001', 'Fair_Trade', 'Organic', 'B_Corp', 'Rainforest_Alliance']
+    cert_score = sum(row[cert] for cert in cert_cols) / len(cert_cols)
+    score = (
+        weights['carbon'] * normalized_carbon +
+        weights['recycling'] * normalized_recycling +
+        weights['energy'] * normalized_energy +
+        weights['water'] * normalized_water +
+        weights['waste'] * normalized_waste +
+        weights['certifications'] * cert_score
+    )
+    return round(score * 100, 2)
 
-    # Upload file
-    uploaded_file = st.sidebar.file_uploader("Upload Supplier CSV", type="csv")
+def calculate_scores(df, weights):
+    df['sustainability_score'] = df.apply(
+        lambda row: calculate_sustainability_score(row, weights),
+        axis=1
+    )
+    return df.sort_values('sustainability_score', ascending=False)
+
+def main():
+    st.title("Sustainable Supplier Selection Tool (Debug Mode)")
+
+    # Upload
+    uploaded_file = st.sidebar.file_uploader("Upload Supplier Data (CSV)", type=["csv"])
     df = load_data(uploaded_file)
 
-    # Debug: Show available columns
-    st.sidebar.write("📂 Columns in dataset:", df.columns.tolist())
+    # Debug: Show uploaded file preview
+    st.sidebar.markdown("### Uploaded Data Preview")
+    st.sidebar.dataframe(df.head())
 
-    if df.empty:
-        st.warning("No data available. Please upload a dataset.")
-        return
-
-    # Weights
-    st.sidebar.header("⚖️ Criteria Weights")
-    weights = {
-        "Carbon Footprint": st.sidebar.slider("Carbon Footprint", 0.0, 1.0, 0.2),
-        "Recycling Rate": st.sidebar.slider("Recycling Rate", 0.0, 1.0, 0.2),
-        "Energy Efficiency": st.sidebar.slider("Energy Efficiency", 0.0, 1.0, 0.2),
-        "Water Usage": st.sidebar.slider("Water Usage", 0.0, 1.0, 0.1),
-        "Waste Production": st.sidebar.slider("Waste Production", 0.0, 1.0, 0.1),
-        "Certifications": st.sidebar.slider("Certifications", 0.0, 1.0, 0.2),
-    }
-
-    if abs(sum(weights.values()) - 1.0) > 0.01:
-        st.sidebar.warning("⚠️ The weights should sum to 1 for proper scoring.")
+    st.write("### Debug: Full Data (first 10 rows)")
+    st.dataframe(df.head(10))
 
     # Filters
-    st.sidebar.header("🔍 Filters")
+    st.sidebar.header("Filters")
+    cert_cols = ['ISO_14001', 'Fair_Trade', 'Organic', 'B_Corp', 'Rainforest_Alliance']
+    cert_filters = {cert: st.sidebar.checkbox(cert.replace('_', ' '), value=True) for cert in cert_cols}
+    industries = st.sidebar.multiselect("Industry", options=df['industry'].unique(), default=df['industry'].unique())
+    locations = st.sidebar.multiselect("Location", options=df['location'].unique(), default=df['location'].unique())
 
-    if "industry" in df.columns:
-        industry_filter = st.sidebar.multiselect(
-            "Select Industry",
-            options=df["industry"].dropna().unique(),
-            default=df["industry"].dropna().unique()
-        )
-        df = df[df["industry"].isin(industry_filter)]
-    else:
-        st.sidebar.warning("⚠️ No 'industry' column found in dataset")
+    # Weights
+    st.sidebar.subheader("Scoring Weights")
+    weights = {
+        'carbon': st.sidebar.slider("Carbon Footprint", 0.0, 0.3, 0.25, 0.05),
+        'recycling': st.sidebar.slider("Recycling Rate", 0.0, 0.3, 0.15, 0.05),
+        'energy': st.sidebar.slider("Energy Efficiency", 0.0, 0.3, 0.15, 0.05),
+        'water': st.sidebar.slider("Water Usage", 0.0, 0.3, 0.15, 0.05),
+        'waste': st.sidebar.slider("Waste Production", 0.0, 0.3, 0.15, 0.05),
+        'certifications': st.sidebar.slider("Certifications", 0.0, 0.3, 0.15, 0.05),
+    }
 
-    if "location" in df.columns:
-        location_filter = st.sidebar.multiselect(
-            "Select Location",
-            options=df["location"].dropna().unique(),
-            default=df["location"].dropna().unique()
-        )
-        df = df[df["location"].isin(location_filter)]
-    else:
-        st.sidebar.warning("⚠️ No 'location' column found in dataset")
+    # Apply filters
+    filtered_df = df.copy()
+    for cert, include in cert_filters.items():
+        if not include:
+            filtered_df = filtered_df[filtered_df[cert] == 0]
+    filtered_df = filtered_df[filtered_df['industry'].isin(industries)]
+    filtered_df = filtered_df[filtered_df['location'].isin(locations)]
 
-    # Calculate scores
-    df = calculate_scores(df, weights)
-
-    if df.empty:
-        st.warning("⚠️ No suppliers match the selected filters.")
+    st.write(f"### Debug: Suppliers after filters → {len(filtered_df)} rows")
+    if filtered_df.empty:
+        st.error("⚠️ No suppliers left after applying filters!")
         return
 
-    # Ranking
-    st.subheader("🏆 Supplier Ranking")
-    st.dataframe(df.sort_values("sustainability_score", ascending=False)[
-        ["supplier_id", "name", "sustainability_score"]
-    ].reset_index(drop=True))
+    # Calculate scores
+    scored_df = calculate_scores(filtered_df, weights)
+    st.write("### Debug: Scored Data (first 10 rows)")
+    st.dataframe(scored_df.head(10))
 
-    # Visualization
-    st.subheader("📊 Score Distribution")
-    fig = px.histogram(df, x="sustainability_score", nbins=10, title="Distribution of Sustainability Scores")
-    st.plotly_chart(fig, use_container_width=True)
-
-    if "industry" in df.columns:
-        st.subheader("📌 Industry Comparison")
-        fig2 = px.box(df, x="industry", y="sustainability_score", title="Score Distribution by Industry")
-        st.plotly_chart(fig2, use_container_width=True)
-
-    if "location" in df.columns:
-        st.subheader("🌍 Location Comparison")
-        fig3 = px.box(df, x="location", y="sustainability_score", title="Score Distribution by Location")
-        st.plotly_chart(fig3, use_container_width=True)
+    # Continue with your normal charts / details / scenario comparison below…
+    # (keep your existing logic here)
 
 if __name__ == "__main__":
     main()
 
-    main()
