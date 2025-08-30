@@ -34,7 +34,7 @@ def calculate_sustainability_score(row):
             row.get('Rainforest_Alliance', 0)
         ]) * 5
         return (carbon_score + recycling_score + energy_score +
-                water_score + waste_score + certifications) / 7
+                water_score + waste_score + certifications) / 6
     except Exception:
         return 0
 
