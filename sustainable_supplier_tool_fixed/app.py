@@ -1,4 +1,4 @@
-import streamlit as st
+i need the exact code...but i want want to see supplier_data.csv not found............modify that part only.......import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -11,25 +11,29 @@ st.set_page_config(
     layout="wide"
 )
 
-# Load data safely
+# Load data with error handling
 @st.cache_data
 def load_data():
-    if os.path.exists("supplier_data.csv"):
-        return pd.read_csv("supplier_data.csv")
-    else:
-        return None
+    # Try to load the data file
+    return pd.read_csv('supplier_data.csv')
 
 # Scoring functions
 def calculate_sustainability_score(row, weights):
+    """
+    Calculate overall sustainability score based on weighted factors
+    """
+    # Normalize quantitative metrics (higher is better for most)
     normalized_carbon = 1 - (row['carbon_footprint'] / 1000)
     normalized_recycling = row['recycling_rate'] / 100
     normalized_energy = row['energy_efficiency'] / 100
     normalized_water = 1 - (row['water_usage'] / 10000)
     normalized_waste = 1 - (row['waste_production'] / 500)
     
+    # Certification points (qualitative factors)
     cert_cols = ['ISO_14001', 'Fair_Trade', 'Organic', 'B_Corp', 'Rainforest_Alliance']
     cert_score = sum(row[cert] for cert in cert_cols) / len(cert_cols)
     
+    # Calculate weighted score
     score = (
         weights['carbon'] * normalized_carbon +
         weights['recycling'] * normalized_recycling +
@@ -38,9 +42,13 @@ def calculate_sustainability_score(row, weights):
         weights['waste'] * normalized_waste +
         weights['certifications'] * cert_score
     )
+    
     return round(score * 100, 2)
 
 def calculate_scores(df, weights):
+    """
+    Calculate sustainability scores for all suppliers
+    """
     df['sustainability_score'] = df.apply(
         lambda row: calculate_sustainability_score(row, weights), 
         axis=1
@@ -63,10 +71,6 @@ def main():
     
     # Load data
     df = load_data()
-    
-    if df is None:
-        st.info("📂 supplier_data.csv not found. Please add the file to continue.")
-        return  # Stop here if no file
     
     # Sidebar filters
     st.sidebar.header("Filters")
@@ -102,16 +106,20 @@ def main():
     weights['waste'] = st.sidebar.slider("Waste Production", 0.0, 0.3, 0.15, 0.05)
     weights['certifications'] = st.sidebar.slider("Certifications", 0.0, 0.3, 0.15, 0.05)
     
+    # Check if weights sum to 1
     total_weight = sum(weights.values())
     if total_weight != 1.0:
         st.sidebar.warning(f"Weights sum to {total_weight:.2f} (should sum to 1.0)")
     
     # Apply filters
     filtered_df = df.copy()
+    
+    # Apply certification filters
     for cert, include in cert_filters.items():
         if not include:
             filtered_df = filtered_df[filtered_df[cert] == 0]
     
+    # Apply industry and location filters
     filtered_df = filtered_df[filtered_df['industry'].isin(industries)]
     filtered_df = filtered_df[filtered_df['location'].isin(locations)]
     
@@ -130,11 +138,13 @@ def main():
         )
     
     with col2:
+        # Sustainability score distribution
         fig1 = px.histogram(scored_df, x='sustainability_score', 
                            title="Score Distribution")
         st.plotly_chart(fig1, use_container_width=True)
     
     with col3:
+        # Average scores by industry
         industry_scores = scored_df.groupby('industry')['sustainability_score'].mean().reset_index()
         fig2 = px.bar(industry_scores, x='industry', y='sustainability_score',
                      title="Average Score by Industry")
@@ -202,32 +212,39 @@ def main():
         current = scored_df[scored_df['name'] == current_supplier].iloc[0]
         alternative = scored_df[scored_df['name'] == alternative_supplier].iloc[0]
         
+        # Calculate impact differences
         impact_diff = {
             'Carbon Footprint': alternative['carbon_footprint'] - current['carbon_footprint'],
             'Water Usage': alternative['water_usage'] - current['water_usage'],
             'Waste Production': alternative['waste_production'] - current['waste_production']
         }
         
+        # Display comparison
         st.subheader("Environmental Impact Comparison")
         
         fig = go.Figure()
+        
         fig.add_trace(go.Bar(
             name='Current',
             x=list(impact_diff.keys()),
             y=[current['carbon_footprint'], current['water_usage'], current['waste_production']],
             marker_color='blue'
         ))
+        
         fig.add_trace(go.Bar(
             name='Alternative',
             x=list(impact_diff.keys()),
             y=[alternative['carbon_footprint'], alternative['water_usage'], alternative['waste_production']],
             marker_color='green'
         ))
+        
         fig.update_layout(barmode='group', title_text="Environmental Impact Comparison")
         st.plotly_chart(fig, use_container_width=True)
         
+        # Summary of changes
         improvements = []
         declines = []
+        
         for metric, diff in impact_diff.items():
             if diff < 0:
                 improvements.append(f"{metric}: {abs(diff):.2f} reduction")
@@ -239,6 +256,7 @@ def main():
         if declines:
             st.error("Declines: " + ", ".join(declines))
         
+        # Overall recommendation
         if len(improvements) > len(declines):
             st.success("Recommendation: Consider switching to this supplier")
         elif len(improvements) < len(declines):
