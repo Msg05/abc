@@ -1,4 +1,5 @@
-i need the exact code...but i want want to see supplier_data.csv not found............modify that part only.......import streamlit as st
+
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -14,8 +15,53 @@ st.set_page_config(
 # Load data with error handling
 @st.cache_data
 def load_data():
-    # Try to load the data file
-    return pd.read_csv('supplier_data.csv')
+    try:
+        # Try to load the data file
+        return pd.read_csv('supplier_data.csv')
+    except FileNotFoundError:
+        # If file not found, create sample data
+        st.warning("Generating sample data...")
+        return generate_sample_data()
+
+def generate_sample_data(num_suppliers=50):
+    """
+    Generate sample supplier data with sustainability metrics
+    """
+    import numpy as np
+    
+    np.random.seed(42)
+    
+    data = {
+        'supplier_id': range(1, num_suppliers+1),
+        'name': [f'Supplier {i}' for i in range(1, num_suppliers+1)],
+        'carbon_footprint': np.random.uniform(100, 1000, num_suppliers),
+        'recycling_rate': np.random.uniform(20, 95, num_suppliers),
+        'energy_efficiency': np.random.uniform(50, 95, num_suppliers),
+        'water_usage': np.random.uniform(100, 10000, num_suppliers),
+        'waste_production': np.random.uniform(10, 500, num_suppliers),
+    }
+    
+    # Add certifications (binary flags)
+    certifications = ['ISO_14001', 'Fair_Trade', 'Organic', 'B_Corp', 'Rainforest_Alliance']
+    for cert in certifications:
+        data[cert] = np.random.choice([0, 1], size=num_suppliers, p=[0.6, 0.4])
+    
+    # Add location and industry
+    locations = ['North America', 'Europe', 'Asia', 'South America', 'Africa']
+    industries = ['Electronics', 'Textiles', 'Food', 'Chemicals', 'Manufacturing']
+    
+    data['location'] = np.random.choice(locations, num_suppliers)
+    data['industry'] = np.random.choice(industries, num_suppliers)
+    
+    df = pd.DataFrame(data)
+    
+    # Save the generated data for future use
+    try:
+        df.to_csv('supplier_data.csv', index=False)
+    except:
+        pass  # If we can't save, just continue
+    
+    return df
 
 # Scoring functions
 def calculate_sustainability_score(row, weights):
